@@ -114,12 +114,20 @@ namespace CleanBinAndObj
             for (uint index = 0; index < solutionProjects.Length; index++)
             {
                 var project = solutionProjects[index];
-                var projectRootPath = GetProjectRootFolder(project);
                 var message = $"Cleaning {project.UniqueName}";
                 WriteToOutput(message);
-                StatusBar.Progress(ref cookie, 1, string.Empty, index, (uint) solutionProjects.Length);
-                StatusBar.SetText(message);
-                CleanDirectory(projectRootPath);
+
+                try
+                {
+                    var projectRootPath = GetProjectRootFolder(project);
+                    StatusBar.Progress(ref cookie, 1, string.Empty, index, (uint)solutionProjects.Length);
+                    StatusBar.SetText(message);
+                    CleanDirectory(projectRootPath);
+                }
+                catch (Exception ex)
+                {
+                    WriteToOutput($"Failed to clean project {project.UniqueName}: {ex}");
+                }
             }
 
             sw.Stop();
@@ -219,27 +227,24 @@ namespace CleanBinAndObj
 
         private static string GetProjectRootFolder(Project project)
         {
-            if (string.IsNullOrEmpty(project.FullName))
-                return null;
+            string fullPath = project.FullName;
 
-            string fullPath;
+            if (string.IsNullOrEmpty(fullPath))
+                return null;
 
             try
             {
-                fullPath = project.Properties.Item("FullPath").Value as string;
-            }
-            catch (ArgumentException)
-            {
-                try
-                {
+                var projectProperties = project.Properties;
+                fullPath = (projectProperties?.Item("FullPath")?.Value
                     // MFC projects don't have FullPath, and there seems to be no way to query existence
-                    fullPath = project.Properties.Item("ProjectDirectory").Value as string;
-                }
-                catch (ArgumentException)
-                {
+                    ?? projectProperties?.Item("ProjectDirectory")?.Value
                     // Installer projects have a ProjectPath.
-                    fullPath = project.Properties.Item("ProjectPath").Value as string;
-                }
+                    ?? projectProperties?.Item("ProjectPath")?.Value) as string;
+            }
+            catch (Exception ex)
+            {
+                // ex. System.ArgumentException: The parameter is incorrect. (Exception from HRESULT: 0x80070057 (E_INVALIDARG))
+                // ignore
             }
 
             if (string.IsNullOrEmpty(fullPath))
